@@ -36,4 +36,15 @@ df = df_cmv_nwp.merge(df_meas, on='valid_time')
 fil = df['step'] == pd.Timedelta('15min')
 df_fil = df.loc[fil, ['forecast', 'measurements']]
 #%%
-df_fil.plot()
+plt.ioff()
+grps_step = df.groupby('step')
+for k, grp in grps_step:
+    fig, ax = plt.subplots(figsize=(20, 10))
+    ax = grp[['forecast', 'measurements']].plot(ax=ax)
+    k_str = int(k.total_seconds()/60.)
+    plt.title(k)
+    plt.ylim([0, 1000])
+    plt.savefig('/home/tzech/results/plots/ts_{0}.png'.format(k_str))
+
+plt.close('all')
+plt.ion()
