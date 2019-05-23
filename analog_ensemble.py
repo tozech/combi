@@ -139,9 +139,13 @@ def gen_ens(df, data, ens_func, step=pd.Timedelta('15min')):
     return ens
 
 #%% Ensemble size
-ens_size = 30
+ens_size = 20
+stream = 'cmv'
 #%%
-fname = '/home/tzech/ownCloud/Data/combi/cmv_nwp/Q1/20160401-20160430.nc'
+if stream == 'cmv_nwp':
+    fname = '/home/tzech/ownCloud/Data/combi/cmv_nwp/Q1/20160401-20160430.nc'
+elif stream == 'cmv':
+    fname = '/home/tzech/ownCloud/Data/combi/cmv/20160401-20160430.nc'
 cmv_nwp = xr.open_dataset(fname)
 #%%
 loc_id = 100910
@@ -215,16 +219,24 @@ for key, ens_func in models.items():
 
         plot_ts(meas_ts, current_fc, ens)
         plt.legend([])
-        plt.title('{2} CMV+NWP step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key))
-        plt.savefig('/home/tzech/ownCloud/Data/plots/ts_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key))
+        if stream == 'cmv_nwp':
+            title = '{2} CMV+NWP step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
+        elif stream == 'cmv':
+            title = '{2} CMV step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
+        plt.title(title)
+        plt.savefig('/home/tzech/ownCloud/Data/plots/{3}/ts_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key, stream))
 
         rh, bins = rankhist(meas_ts, ens)
         plot_rankhist(rh, bins, normalize=True)
         plt.legend([])
         plt.ylabel('$rel.\;freq\;of\;rank$')
         plt.xlabel('$ranks$')
-        plt.title('Ranks: {2} CMV+NWP step={0}min n={1}: Arkona, April 2016'.format(step_min, ens_size, key))
-        plt.savefig('/home/tzech/ownCloud/Data/plots/RankHist_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key))
+        if stream == 'cmv_nwp':
+            title = '{2} CMV+NWP step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
+        elif stream == 'cmv':
+            title = '{2} CMV step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
+        plt.title(title)
+        plt.savefig('/home/tzech/ownCloud/Data/plots/{3}/RankHist_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key, stream))
 
 #%%
 fig, ax = plt.subplots()
@@ -236,8 +248,12 @@ ax.plot(x, y)
 ax.set_xlabel('$step \; [min]$')
 ax.set_ylabel('$rel. CRPS_{mean} \; [-]$')
 ax.legend(['PeEn', 'AnEn'])
-ax.set_title('Analog Ensemble CMV+NWP n={0}: Arkona, April 2016'.format(ens_size))
-plt.savefig('/home/tzech/ownCloud/Data/plots/CRPS_AnEn_Arkona_2016-04_n{0}.png'.format(ens_size))
+if stream == 'cmv_nwp':
+    title = 'Analog Ensemble CMV+NWP n={0}: Arkona, April 2016'.format(ens_size)
+elif stream == 'cmv':
+    title = 'Analog Ensemble CMV n={0}: Arkona, April 2016'.format(ens_size)
+ax.set_title(title)
+plt.savefig('/home/tzech/ownCloud/Data/plots/{1}/CRPS_AnEn_Arkona_2016-04_n{0}.png'.format(ens_size, stream))
 #%%
 plt.close('all')
 plt.ion()
