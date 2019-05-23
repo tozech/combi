@@ -13,16 +13,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import xarray as xr
 
-import seaborn as sns  
+import seaborn as sns
 
 import ranky
+import properscoring
 #%%
 def get_samples(data, key, n=10, ascending=True):
     data = data.sort_values(key, ascending=ascending)
     return data.iloc[-n:, :]
 
 def latest_samples(data, n=10):
-    return get_samples(data, 'base_time')
+    return get_samples(data, 'delta_t', n)
 
 
 def latest_measurements(data, n=10):
@@ -80,11 +81,65 @@ def rankhist(meas_ts, df_ens):
     rh, bins = ranky.rankz(meas_ts.values, df_ens.values.T, mask)
     return rh, bins
 
-def plot_rankhist(rh, bins):
+def plot_rankhist(rh, bins, normalize=False):
     fig, ax = plt.subplots()
+    if normalize:
+        rh = rh / np.sum(rh)
     ax.bar(bins[:-1], rh)
     return fig, ax
 
+# Ensemble definition functions
+def persistence_ens(df, target_date):
+    fil_now = df['step'] == pd.Timedelta('0min')
+    func = lambda x: latest_measurements(x, n=ens_size)
+    ens = create_ensemble(df.loc[fil_now, :], func, target_date)
+    return ens
+
+def analog_ens_one_val(df, target_date):
+    """Analog ensemble only on current values
+    """
+    func = lambda x: analogs_one_val(x, n=ens_size)
+    ens = create_ensemble(df, func, target_date)
+    return ens
+
+def delta_t_from_date(df, date):
+    delta_t = date - df['base_time']
+    delta_t[delta_t < pd.Timedelta(0)] += pd.Timedelta('32d')
+    return delta_t
+
+def gen_ens(df, data, ens_func, step=pd.Timedelta('15min')):
+    """Leave one day out cross validation
+    """
+    df_test = df
+    test_date = df['date'].unique()
+    assert len(test_date) == 1
+    test_date = test_date[0]
+    print(test_date)
+    fil_train = data['date'] != test_date
+    df_train = data.loc[fil_train]
+    fil_step = df_test['step'] == step
+
+    df_test_meas = df_test.loc[fil_step, ['measurements', 'forecast', 'valid_time_of_day']]
+    df_train_test = df_train.merge(df_test_meas, how='left', on='valid_time_of_day', suffixes=('', '_test'))
+
+    df_train_test['delta_t'] = delta_t_from_date(df_train_test, test_date)
+
+    pd.Timestamp('2016-04-10') - df['base_time']
+
+    fil_now = df_test['step'] == pd.Timedelta('0min')
+    fil_step = df_test['step'] == pd.Timedelta('15min')
+    meas_ts = df_test.loc[fil_now, :].set_index('valid_time')['measurements']
+
+    df_train_test['abs_train_test'] = (df_train_test['forecast'] - df_train_test['forecast_test']).abs()
+    # Build ensemble
+    ens = ens_func(df_train_test, test_date)
+
+    fil_times = align(meas_ts, test_date, ens)
+    ens = ens.loc[fil_times, :]
+    return ens
+
+#%% Ensemble size
+ens_size = 30
 #%%
 fname = '/home/tzech/ownCloud/Data/combi/cmv_nwp/Q1/20160401-20160430.nc'
 cmv_nwp = xr.open_dataset(fname)
@@ -132,70 +187,76 @@ for k, grp in grps_step:
     plt.savefig('/home/tzech/results/plots/ts_{0}.png'.format(k_str))
 
 plt.close('all')
-plt.ion()
-#%% Leave one day out cross validation
-# Start with leave 2016-04-30 out and use 15min step only
-ens_size = 10
-def persistence_ens(df, target_date):
-    fil_now = df['step'] == pd.Timedelta('0min')
-    func = lambda x: latest_measurements(x, n=ens_size)
-    ens = create_ensemble(df.loc[fil_now, :], func, target_date)
-    return ens
-
-def analog_ens_one_val(df, target_date):
-    """Analog ensemble only on current values
-    """
-    func = lambda x: analogs_one_val(x, n=ens_size)
-    ens = create_ensemble(df, func, target_date)
-    return ens
 
 
+
+#%% Loop over step
+fil_now = df['step'] == pd.Timedelta('0min')
+fil_step = df['step'] == pd.Timedelta('15min')
+meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
+current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
+
+grps_date = df.groupby('date')
+
+models = {'PeEn': persistence_ens, 'AnEn': analog_ens_one_val}
+step_range = pd.timedelta_range('15min', '6h', freq='15min')
+
+crps_step = OrderedDict()
+for key, ens_func in models.items():
+    crps_step[key] = OrderedDict()
+    for step in step_range:
+        step_min = int(step.total_seconds() / 60)
+        ens = grps_date.apply(gen_ens, data=df, ens_func=ens_func, step=step)
+        ens['crps'] = properscoring.crps_ensemble(meas_ts, ens)
+        crps_step[key][step] = ens['crps'].mean()
+
+        ens = ens.reset_index().set_index('valid_time')
+        ens = drop_date(ens)
+
+        plot_ts(meas_ts, current_fc, ens)
+        plt.legend([])
+        plt.title('{2} CMV+NWP step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key))
+        plt.savefig('/home/tzech/ownCloud/Data/plots/ts_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key))
+
+        rh, bins = rankhist(meas_ts, ens)
+        plot_rankhist(rh, bins, normalize=True)
+        plt.legend([])
+        plt.ylabel('$rel.\;freq\;of\;rank$')
+        plt.xlabel('$ranks$')
+        plt.title('Ranks: {2} CMV+NWP step={0}min n={1}: Arkona, April 2016'.format(step_min, ens_size, key))
+        plt.savefig('/home/tzech/ownCloud/Data/plots/RankHist_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key))
 
 #%%
+fig, ax = plt.subplots()
+x = step_range.total_seconds()/60
+y = np.array(list(crps_step['PeEn'].values())) / meas_ts.mean()
+ax.plot(x, y)
+y = np.array(list(crps_step['AnEn'].values())) / meas_ts.mean()
+ax.plot(x, y)
+ax.set_xlabel('$step \; [min]$')
+ax.set_ylabel('$rel. CRPS_{mean} \; [-]$')
+ax.legend(['PeEn', 'AnEn'])
+ax.set_title('Analog Ensemble CMV+NWP n={0}: Arkona, April 2016'.format(ens_size))
+plt.savefig('/home/tzech/ownCloud/Data/plots/CRPS_AnEn_Arkona_2016-04_n{0}.png'.format(ens_size))
+#%%
+plt.close('all')
+plt.ion()
+assert False, 'Done. The remainer is only test code.'
+#%% Test code
+#   ===========================================================================
 test_date = pd.Timestamp('2016-04-30')
 fil_test = df['base_time'].dt.date == test_date.date()
 df_test = df.loc[fil_test]
-
-def gen_ens(df, data, ens_func):
-#    fil_test = df['base_time'].dt.date == test_date.date()
-#    fil_train = df['base_time'].dt.date != test_date.date()
-#    df_test = df.loc[fil_test]
-    df_test = df
-    test_date = df['date'].unique()
-    assert len(test_date) == 1
-    test_date = test_date[0]
-    print(test_date)
-    fil_train = data['date'] != test_date
-    df_train = data.loc[fil_train]
-    fil_step = df_test['step'] == pd.Timedelta('15min') #TODO is an arbitrary choice!
-    
-    df_test_meas = df_test.loc[fil_step, ['measurements', 'forecast', 'valid_time_of_day']]
-    df_train_test = df_train.merge(df_test_meas, how='left', on='valid_time_of_day', suffixes=('', '_test'))
-    #del(df_test)
-    #del(df_train)
-
-    fil_now = df_test['step'] == pd.Timedelta('0min')
-    fil_step = df_test['step'] == pd.Timedelta('15min')
-    meas_ts = df_test.loc[fil_now, :].set_index('valid_time')['measurements']
-#    current_fc = df_test.loc[fil_step, :].set_index('valid_time')['forecast']
-
-    df_train_test['abs_train_test'] = (df_train_test['forecast'] - df_train_test['forecast_test']).abs()
-    # Build ensemble
-    ens = ens_func(df_train_test, test_date)
-    
-    fil_times = align(meas_ts, test_date, ens)
-    ens = ens.loc[fil_times, :]
-    
-#    plot_ts(meas_ts, current_fc, ens)
-
-#    rh_pers, bins = rankhist(meas_ts, ens)
-    return ens
-
+#%%
 pers = gen_ens(df_test, df, persistence_ens)
+#%%
 analog = gen_ens(df_test, df, analog_ens_one_val)
 #%%
+step_str = '15min'
+step = pd.Timedelta(step_str)
+#%%
 grps_date = df.groupby('date')
-pers = grps_date.apply(gen_ens, data=df, ens_func=persistence_ens)
+pers = grps_date.apply(gen_ens, data=df, ens_func=persistence_ens, step=step)
 #%%
 pers = pers.reset_index().set_index('valid_time')
 pers = drop_date(pers)
@@ -205,11 +266,19 @@ fil_step = df['step'] == pd.Timedelta('15min')
 meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
 current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
 plot_ts(meas_ts, current_fc, pers)
+plt.legend([])
 #%%
 rh_pers, bins = rankhist(meas_ts, pers)
-plot_rankhist(rh_pers, bins)
+plot_rankhist(rh_pers, bins, normalize=True)
+plt.legend([])
+plt.ylabel('$rel.\;freq\;of\;rank$')
+plt.xlabel('$ranks$')
+plt.title('Ranks: Analog Ensemble CMV+NWP step={1} n={0}: Arkona, June 2016'.format(step_str, ens_size))
 #%%
-analog = grps_date.apply(gen_ens, data=df, ens_func=analog_ens_one_val)
+pers['crps'] = properscoring.crps_ensemble(meas_ts, pers)
+print("CRPS perEns: {0} for step=15min".format(pers['crps'].mean()))
+#%%
+analog = grps_date.apply(gen_ens, data=df, ens_func=analog_ens_one_val, step=step)
 #%%
 analog = analog.reset_index().set_index('valid_time')
 analog = drop_date(analog)
@@ -219,6 +288,14 @@ fil_step = df['step'] == pd.Timedelta('15min')
 meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
 current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
 plot_ts(meas_ts, current_fc, analog)
+plt.legend([])
 #%%
 rh_analog, bins = rankhist(meas_ts, analog)
-plot_rankhist(rh_analog, bins)
+plot_rankhist(rh_analog, bins, normalize=True)
+plt.legend([])
+#%%
+analog['crps'] = properscoring.crps_ensemble(meas_ts, analog)
+print("CRPS AnEns: {0} for step=15min".format(analog['crps'].mean()))
+#%%
+msg = 'Nan values for different times between persistence and analog'
+assert (pers['crps'].isnull() == analog['crps'].isnull()).all(), msg
