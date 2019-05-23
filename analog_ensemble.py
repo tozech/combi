@@ -69,7 +69,11 @@ def latest_measurements(data, n=10):
     latest = latest.reset_index()
     meas = latest['measurements']
     return meas
-    
+
+def sort_ensemble(data):
+    values = data.values
+    values.sort(axis=1)
+    return pd.DataFrame(values, index=data.index, columns=data.columns)
 
 fil_now = df['step'] == pd.Timedelta('0min')
 grps_valid_time_of_day = df_train.loc[fil_now, :].groupby('valid_time_of_day')
@@ -82,8 +86,9 @@ pers['time_of_day'] = pers['index'].apply(lambda t: pd.Timedelta(t.strftime('%H:
 pers['valid_time'] = pers['time_of_day'] + test_date
 pers = pers[[col for col in pers.columns if col not in ['index', 'time_of_day']]]
 pers = pers.set_index('valid_time')
+pers = sort_ensemble(pers)
 #%%
 fig, ax = plt.subplots()
-df_test.loc[fil_now, :].set_index('valid_time')['measurements'].plot(ax=ax, lw=3)
-pers.plot(ax=ax)
+pers.plot(ax=ax, color='k', alpha=0.5)
+df_test.loc[fil_now, :].set_index('valid_time')['measurements'].plot(ax=ax, lw=2)
 
