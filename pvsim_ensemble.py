@@ -5,7 +5,7 @@ Created on Mon Jun 10 14:01:10 2019
 
 @author: tzech
 """
-
+import os
 from collections import OrderedDict
 import gc
 
@@ -38,16 +38,18 @@ def compute_derived(x):
     x['P_frac_P_sim'] = x['P_per_peak'] / x['P_sim']
     return x
 #%%
-fname = '/home/tzech/ownCloud/Data/ground_measurements/pvk_monitoring/20160401-20160430.nc'
+fname = '~/ownCloud/Data/ground_measurements/pvk_monitoring/20160401-20160430.nc'
+fname = os.path.expanduser(fname)
 ds = xr.open_dataset(fname)
-#%%
+#%% Resample to 15min
 ds = ds.resample(time='15min').mean('time')
+#%% normalize to peak power and use global irradiance in plane as PV sim
 ds = compute_derived(ds)
 #%%
 train_locIds = ['a000270', 'a000255', 'a000267', 'a000279', 'a000257', 'a000268',
                 'a000331', 'a000281']
 #%%
-#a000268: No power on 2016-04-05 13h
+#a000268: No power on 2016-04-05 13h vanished after resampling
 #a000255: No power on 2016-04-12
 
 #%%
@@ -90,10 +92,25 @@ total_train[['P_per_peak', 'P_sim', 'is_zero_despite']].plot(ax=ax, marker='.', 
 ax.set_title('total')
 #%%
 cols = ['P_per_peak', 'P_sim', 'P_frac_P_sim']
-sns.pairplot(total_train[cols].reset_index())
+sns.pairplot(total_train[cols].reset_index(), diag_kws={'bins': 30})
 #%%
 cols = ['P_per_peak', 'P_sim', 'P_frac_P_sim', 'is_zero_despite']
 sns.pairplot(total_train[cols].reset_index(), hue='is_zero_despite')
+#%% 
+total_train['date'] = pd.to_datetime(total_train.index.date)
+total_train['time_of_day'] = pd.to_timedelta(total_train.index.time)
+#%%
+fig, axs = plt.subplots(nrows=2)
+total_train['G_kW'].plot(ax=axs[0])
+sns.boxplot(x='date', y='P_frac_P_sim', data=total_train[['P_frac_P_sim', 'date']], ax=axs[1])
+#%%
+fig, ax = plt.subplots()
+sns.boxplot(x='time_of_day', y='P_frac_P_sim', data=total_train[['P_frac_P_sim', 'time_of_day']], ax=ax)
+
+#%% Persistence ensemble
+P_frac_time_of_day = total_train.copy(deep=True)
+P_frac_time_of_day = P_frac_time_of_day.reset_index().set_index(['date', 'time_of_day'])
+P_frac_time_of_day = pd.DataFrame(P_frac_time_of_day['P_frac_P_sim']).unstack()
 #%%
 assert False
 #%%
