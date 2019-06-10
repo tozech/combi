@@ -41,6 +41,7 @@ def compute_derived(x):
 fname = '/home/tzech/ownCloud/Data/ground_measurements/pvk_monitoring/20160401-20160430.nc'
 ds = xr.open_dataset(fname)
 #%%
+ds = ds.resample(time='15min').mean('time')
 ds = compute_derived(ds)
 #%%
 train_locIds = ['a000270', 'a000255', 'a000267', 'a000279', 'a000257', 'a000268',
@@ -79,10 +80,17 @@ train['P_frac_P_sim'].hist(ax=ax, bins=100, log=False)
 #%%
 sns.pairplot(train[['P_per_peak', 'P_sim', 'T_m__0', 'P_frac_P_sim']].reset_index(), hue='location_id')
 #%% aggregated
-total_train = train[['E_wr__0', 'G_m__0', 'pv_P_dc', 'is_zero_despite']].groupby(level=1).sum(skipna=True)
+total_train = train[['E_wr__0', 'G_m__0', 'is_zero_despite']].groupby(level=1).sum(skipna=True)
+total_train['G_m__0'] /= len(train_locIds)
+total_train['pv_P_dc'] = train['pv_P_dc'].unique().sum()
 total_train = compute_derived(total_train)
 #%%
-total_train = total_train.dropna()
+fig, ax = plt.subplots()
+total_train[['P_per_peak', 'P_sim', 'is_zero_despite']].plot(ax=ax, marker='.', secondary_y='is_zero_despite')
+ax.set_title('total')
+#%%
+cols = ['P_per_peak', 'P_sim', 'P_frac_P_sim']
+sns.pairplot(total_train[cols].reset_index())
 #%%
 cols = ['P_per_peak', 'P_sim', 'P_frac_P_sim', 'is_zero_despite']
 sns.pairplot(total_train[cols].reset_index(), hue='is_zero_despite')
