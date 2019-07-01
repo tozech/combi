@@ -138,180 +138,181 @@ def gen_ens(df, data, ens_func, step=pd.Timedelta('15min')):
     ens = ens.loc[fil_times, :]
     return ens
 
-#%% Ensemble size
-ens_size = 20
-stream = 'cmv'
-#%%
-if stream == 'cmv_nwp':
-    fname = '/home/tzech/ownCloud/Data/combi/cmv_nwp/Q1/20160401-20160430.nc'
-elif stream == 'cmv':
-    fname = '/home/tzech/ownCloud/Data/combi/cmv/20160401-20160430.nc'
-cmv_nwp = xr.open_dataset(fname)
-#%%
-loc_id = 100910
-cmv_nwp = cmv_nwp.sel(location_id=loc_id)
-#%%
-df_cmv_nwp = cmv_nwp.to_dataframe()
-df_cmv_nwp = df_cmv_nwp.reset_index()
-#%%
-fname = '/home/tzech/ownCloud/Data/ground_measurements/dwd/10min/historical/20160401-20160430.nc'
-meas = xr.open_dataset(fname)
-#%%
-loc_id = 183
-meas = meas.sel(station_id=loc_id)
-meas = meas.rename({'datetime': 'valid_time', 'global': 'measurements'})
-df_meas = meas.to_dataframe()
-df_meas = df_meas.loc[:, 'measurements']
-df_meas = df_meas.reset_index()
-#%%
-df = df_cmv_nwp.merge(df_meas, on='valid_time')
-#%%
-cmv_nwp.close()
-del(cmv_nwp)
-meas.close()
-del(meas)
-del(df_meas)
-del(df_cmv_nwp)
-gc.collect()
-#%% Add time of day
-df['valid_time_of_day'] = df.valid_time.dt.time
-df['date'] = df.valid_time.dt.date
-#%%
-fil_step = df['step'] == pd.Timedelta('15min')
-df_fil = df.loc[fil_step, ['forecast', 'measurements']]
-#%%
-plt.ioff()
-grps_step = df.groupby('step')
-for k, grp in grps_step:
-    fig, ax = plt.subplots(figsize=(20, 10))
-    ax = grp[['forecast', 'measurements']].plot(ax=ax)
-    k_str = int(k.total_seconds()/60.)
-    plt.title(k)
-    plt.ylim([0, 1000])
-    plt.savefig('/home/tzech/results/plots/ts_{0}.png'.format(k_str))
+if __name__ == '__main__':
+    #%% Ensemble size
+    ens_size = 20
+    stream = 'cmv'
+    #%%
+    if stream == 'cmv_nwp':
+        fname = '/home/tzech/ownCloud/Data/combi/cmv_nwp/Q1/20160401-20160430.nc'
+    elif stream == 'cmv':
+        fname = '/home/tzech/ownCloud/Data/combi/cmv/20160401-20160430.nc'
+    cmv_nwp = xr.open_dataset(fname)
+    #%%
+    loc_id = 100910
+    cmv_nwp = cmv_nwp.sel(location_id=loc_id)
+    #%%
+    df_cmv_nwp = cmv_nwp.to_dataframe()
+    df_cmv_nwp = df_cmv_nwp.reset_index()
+    #%%
+    fname = '/home/tzech/ownCloud/Data/ground_measurements/dwd/10min/historical/20160401-20160430.nc'
+    meas = xr.open_dataset(fname)
+    #%%
+    loc_id = 183
+    meas = meas.sel(station_id=loc_id)
+    meas = meas.rename({'datetime': 'valid_time', 'global': 'measurements'})
+    df_meas = meas.to_dataframe()
+    df_meas = df_meas.loc[:, 'measurements']
+    df_meas = df_meas.reset_index()
+    #%%
+    df = df_cmv_nwp.merge(df_meas, on='valid_time')
+    #%%
+    cmv_nwp.close()
+    del(cmv_nwp)
+    meas.close()
+    del(meas)
+    del(df_meas)
+    del(df_cmv_nwp)
+    gc.collect()
+    #%% Add time of day
+    df['valid_time_of_day'] = df.valid_time.dt.time
+    df['date'] = df.valid_time.dt.date
+    #%%
+    fil_step = df['step'] == pd.Timedelta('15min')
+    df_fil = df.loc[fil_step, ['forecast', 'measurements']]
+    #%%
+    plt.ioff()
+    grps_step = df.groupby('step')
+    for k, grp in grps_step:
+        fig, ax = plt.subplots(figsize=(20, 10))
+        ax = grp[['forecast', 'measurements']].plot(ax=ax)
+        k_str = int(k.total_seconds()/60.)
+        plt.title(k)
+        plt.ylim([0, 1000])
+        plt.savefig('/home/tzech/results/plots/ts_{0}.png'.format(k_str))
 
-plt.close('all')
+    plt.close('all')
 
 
 
-#%% Loop over step
-fil_now = df['step'] == pd.Timedelta('0min')
-fil_step = df['step'] == pd.Timedelta('15min')
-meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
-current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
+    #%% Loop over step
+    fil_now = df['step'] == pd.Timedelta('0min')
+    fil_step = df['step'] == pd.Timedelta('15min')
+    meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
+    current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
 
-grps_date = df.groupby('date')
+    grps_date = df.groupby('date')
 
-models = {'PeEn': persistence_ens, 'AnEn': analog_ens_one_val}
-step_range = pd.timedelta_range('15min', '6h', freq='15min')
+    models = {'PeEn': persistence_ens, 'AnEn': analog_ens_one_val}
+    step_range = pd.timedelta_range('15min', '6h', freq='15min')
 
-crps_step = OrderedDict()
-for key, ens_func in models.items():
-    crps_step[key] = OrderedDict()
-    for step in step_range:
-        step_min = int(step.total_seconds() / 60)
-        ens = grps_date.apply(gen_ens, data=df, ens_func=ens_func, step=step)
-        ens['crps'] = properscoring.crps_ensemble(meas_ts, ens)
-        crps_step[key][step] = ens['crps'].mean()
+    crps_step = OrderedDict()
+    for key, ens_func in models.items():
+        crps_step[key] = OrderedDict()
+        for step in step_range:
+            step_min = int(step.total_seconds() / 60)
+            ens = grps_date.apply(gen_ens, data=df, ens_func=ens_func, step=step)
+            ens['crps'] = properscoring.crps_ensemble(meas_ts, ens)
+            crps_step[key][step] = ens['crps'].mean()
 
-        ens = ens.reset_index().set_index('valid_time')
-        ens = drop_date(ens)
+            ens = ens.reset_index().set_index('valid_time')
+            ens = drop_date(ens)
 
-        plot_ts(meas_ts, current_fc, ens)
-        plt.legend([])
-        if stream == 'cmv_nwp':
-            title = '{2} CMV+NWP step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
-        elif stream == 'cmv':
-            title = '{2} CMV step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
-        plt.title(title)
-        plt.savefig('/home/tzech/ownCloud/Data/plots/{3}/ts_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key, stream))
+            plot_ts(meas_ts, current_fc, ens)
+            plt.legend([])
+            if stream == 'cmv_nwp':
+                title = '{2} CMV+NWP step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
+            elif stream == 'cmv':
+                title = '{2} CMV step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
+            plt.title(title)
+            plt.savefig('/home/tzech/ownCloud/Data/plots/{3}/ts_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key, stream))
 
-        rh, bins = rankhist(meas_ts, ens)
-        plot_rankhist(rh, bins, normalize=True)
-        plt.legend([])
-        plt.ylabel('$rel.\;freq\;of\;rank$')
-        plt.xlabel('$ranks$')
-        if stream == 'cmv_nwp':
-            title = '{2} CMV+NWP step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
-        elif stream == 'cmv':
-            title = '{2} CMV step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
-        plt.title(title)
-        plt.savefig('/home/tzech/ownCloud/Data/plots/{3}/RankHist_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key, stream))
+            rh, bins = rankhist(meas_ts, ens)
+            plot_rankhist(rh, bins, normalize=True)
+            plt.legend([])
+            plt.ylabel('$rel.\;freq\;of\;rank$')
+            plt.xlabel('$ranks$')
+            if stream == 'cmv_nwp':
+                title = '{2} CMV+NWP step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
+            elif stream == 'cmv':
+                title = '{2} CMV step={0}min n={1}: Arkona, Arpil 2016'.format(step_min, ens_size, key)
+            plt.title(title)
+            plt.savefig('/home/tzech/ownCloud/Data/plots/{3}/RankHist_{2}_Arkona_2016-04_step_{0}min_n{1}.png'.format(step_min, ens_size, key, stream))
 
-#%%
-fig, ax = plt.subplots()
-x = step_range.total_seconds()/60
-y = np.array(list(crps_step['PeEn'].values())) / meas_ts.mean()
-ax.plot(x, y)
-y = np.array(list(crps_step['AnEn'].values())) / meas_ts.mean()
-ax.plot(x, y)
-ax.set_xlabel('$step \; [min]$')
-ax.set_ylabel('$rel. CRPS_{mean} \; [-]$')
-ax.legend(['PeEn', 'AnEn'])
-if stream == 'cmv_nwp':
-    title = 'Analog Ensemble CMV+NWP n={0}: Arkona, April 2016'.format(ens_size)
-elif stream == 'cmv':
-    title = 'Analog Ensemble CMV n={0}: Arkona, April 2016'.format(ens_size)
-ax.set_title(title)
-plt.savefig('/home/tzech/ownCloud/Data/plots/{1}/CRPS_AnEn_Arkona_2016-04_n{0}.png'.format(ens_size, stream))
-#%%
-plt.close('all')
-plt.ion()
-assert False, 'Done. The remainer is only test code.'
-#%% Test code
-#   ===========================================================================
-test_date = pd.Timestamp('2016-04-30')
-fil_test = df['base_time'].dt.date == test_date.date()
-df_test = df.loc[fil_test]
-#%%
-pers = gen_ens(df_test, df, persistence_ens)
-#%%
-analog = gen_ens(df_test, df, analog_ens_one_val)
-#%%
-step_str = '15min'
-step = pd.Timedelta(step_str)
-#%%
-grps_date = df.groupby('date')
-pers = grps_date.apply(gen_ens, data=df, ens_func=persistence_ens, step=step)
-#%%
-pers = pers.reset_index().set_index('valid_time')
-pers = drop_date(pers)
-#%%
-fil_now = df['step'] == pd.Timedelta('0min')
-fil_step = df['step'] == pd.Timedelta('15min')
-meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
-current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
-plot_ts(meas_ts, current_fc, pers)
-plt.legend([])
-#%%
-rh_pers, bins = rankhist(meas_ts, pers)
-plot_rankhist(rh_pers, bins, normalize=True)
-plt.legend([])
-plt.ylabel('$rel.\;freq\;of\;rank$')
-plt.xlabel('$ranks$')
-plt.title('Ranks: Analog Ensemble CMV+NWP step={1} n={0}: Arkona, June 2016'.format(step_str, ens_size))
-#%%
-pers['crps'] = properscoring.crps_ensemble(meas_ts, pers)
-print("CRPS perEns: {0} for step=15min".format(pers['crps'].mean()))
-#%%
-analog = grps_date.apply(gen_ens, data=df, ens_func=analog_ens_one_val, step=step)
-#%%
-analog = analog.reset_index().set_index('valid_time')
-analog = drop_date(analog)
-#%%
-fil_now = df['step'] == pd.Timedelta('0min')
-fil_step = df['step'] == pd.Timedelta('15min')
-meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
-current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
-plot_ts(meas_ts, current_fc, analog)
-plt.legend([])
-#%%
-rh_analog, bins = rankhist(meas_ts, analog)
-plot_rankhist(rh_analog, bins, normalize=True)
-plt.legend([])
-#%%
-analog['crps'] = properscoring.crps_ensemble(meas_ts, analog)
-print("CRPS AnEns: {0} for step=15min".format(analog['crps'].mean()))
-#%%
-msg = 'Nan values for different times between persistence and analog'
-assert (pers['crps'].isnull() == analog['crps'].isnull()).all(), msg
+    #%%
+    fig, ax = plt.subplots()
+    x = step_range.total_seconds()/60
+    y = np.array(list(crps_step['PeEn'].values())) / meas_ts.mean()
+    ax.plot(x, y)
+    y = np.array(list(crps_step['AnEn'].values())) / meas_ts.mean()
+    ax.plot(x, y)
+    ax.set_xlabel('$step \; [min]$')
+    ax.set_ylabel('$rel. CRPS_{mean} \; [-]$')
+    ax.legend(['PeEn', 'AnEn'])
+    if stream == 'cmv_nwp':
+        title = 'Analog Ensemble CMV+NWP n={0}: Arkona, April 2016'.format(ens_size)
+    elif stream == 'cmv':
+        title = 'Analog Ensemble CMV n={0}: Arkona, April 2016'.format(ens_size)
+    ax.set_title(title)
+    plt.savefig('/home/tzech/ownCloud/Data/plots/{1}/CRPS_AnEn_Arkona_2016-04_n{0}.png'.format(ens_size, stream))
+    #%%
+    plt.close('all')
+    plt.ion()
+    assert False, 'Done. The remainer is only test code.'
+    #%% Test code
+    #   ===========================================================================
+    test_date = pd.Timestamp('2016-04-30')
+    fil_test = df['base_time'].dt.date == test_date.date()
+    df_test = df.loc[fil_test]
+    #%%
+    pers = gen_ens(df_test, df, persistence_ens)
+    #%%
+    analog = gen_ens(df_test, df, analog_ens_one_val)
+    #%%
+    step_str = '15min'
+    step = pd.Timedelta(step_str)
+    #%%
+    grps_date = df.groupby('date')
+    pers = grps_date.apply(gen_ens, data=df, ens_func=persistence_ens, step=step)
+    #%%
+    pers = pers.reset_index().set_index('valid_time')
+    pers = drop_date(pers)
+    #%%
+    fil_now = df['step'] == pd.Timedelta('0min')
+    fil_step = df['step'] == pd.Timedelta('15min')
+    meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
+    current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
+    plot_ts(meas_ts, current_fc, pers)
+    plt.legend([])
+    #%%
+    rh_pers, bins = rankhist(meas_ts, pers)
+    plot_rankhist(rh_pers, bins, normalize=True)
+    plt.legend([])
+    plt.ylabel('$rel.\;freq\;of\;rank$')
+    plt.xlabel('$ranks$')
+    plt.title('Ranks: Analog Ensemble CMV+NWP step={1} n={0}: Arkona, June 2016'.format(step_str, ens_size))
+    #%%
+    pers['crps'] = properscoring.crps_ensemble(meas_ts, pers)
+    print("CRPS perEns: {0} for step=15min".format(pers['crps'].mean()))
+    #%%
+    analog = grps_date.apply(gen_ens, data=df, ens_func=analog_ens_one_val, step=step)
+    #%%
+    analog = analog.reset_index().set_index('valid_time')
+    analog = drop_date(analog)
+    #%%
+    fil_now = df['step'] == pd.Timedelta('0min')
+    fil_step = df['step'] == pd.Timedelta('15min')
+    meas_ts = df.loc[fil_now, :].set_index('valid_time')['measurements']
+    current_fc = df.loc[fil_step, :].set_index('valid_time')['forecast']
+    plot_ts(meas_ts, current_fc, analog)
+    plt.legend([])
+    #%%
+    rh_analog, bins = rankhist(meas_ts, analog)
+    plot_rankhist(rh_analog, bins, normalize=True)
+    plt.legend([])
+    #%%
+    analog['crps'] = properscoring.crps_ensemble(meas_ts, analog)
+    print("CRPS AnEns: {0} for step=15min".format(analog['crps'].mean()))
+    #%%
+    msg = 'Nan values for different times between persistence and analog'
+    assert (pers['crps'].isnull() == analog['crps'].isnull()).all(), msg
