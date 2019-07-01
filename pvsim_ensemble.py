@@ -107,7 +107,7 @@ sns.boxplot(x='date', y='P_frac_P_sim', data=total_train[['P_frac_P_sim', 'date'
 fig, ax = plt.subplots()
 sns.boxplot(x='time_of_day', y='P_frac_P_sim', data=total_train[['P_frac_P_sim', 'time_of_day']], ax=ax)
 
-#%% Persistence ensemble
+#%% Persistence ensemble by time of day
 P_frac_time_of_day = total_train.copy(deep=True)
 P_frac_time_of_day = P_frac_time_of_day.reset_index().set_index(['date', 'time_of_day'])
 P_frac_time_of_day = pd.DataFrame(P_frac_time_of_day['P_frac_P_sim']).unstack()

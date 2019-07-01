@@ -16,9 +16,13 @@ netcdfname = '/home/tzech/data/weather/numerical_weather/ecmwf/enfo_germany_pf/0
 
 ds = xr.open_dataset(netcdfname)
 #%%
+def low_func(x):
+    print(x.name)
+    return 2 * x
+#%%
 def func(data):
     grps_ssrd = data.groupby_bins('ssrd', bins=3)
-    applied_f = grps_ssrd.apply(lambda x: 2*x)
+    applied_f = grps_ssrd.apply(low_func)
     return applied_f
 
 ds_bin_applied = func(ds)
