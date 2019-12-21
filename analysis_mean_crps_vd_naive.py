@@ -33,6 +33,8 @@ def read_single_file(datadir, method, calib_freq, issorted, month):
     
     df = pd.read_csv(os.path.join(datadir, fname), sep=';')
     df = df.set_index('winsize')
+    for c in ['mean_crps', 'reliability', 'resolution']:
+        df['{0}_by_unc'.format(c)] = df[c] / df['uncertainty']
     df = df.stack()
     df = df.reset_index()
     df.columns = ['winsize', 'metric', 'value']
@@ -59,6 +61,20 @@ cols = ['mean_crps', 'reliability', 'resolution', 'uncertainty']
 sns.relplot('winsize', 'value', 'calib_freq', row='metric', row_order=cols,
             kind='line', facet_kws=dict(sharex=True, sharey=False),
             data=df)
+
+#%%
+def plot_by_unc(data):
+    cols_by_unc = ['{0}_by_unc'.format(c)  for c in ['mean_crps', 'reliability', 'resolution']]
+    g = sns.relplot('winsize', 'value', 'calib_freq', row='metric', row_order=cols_by_unc,
+                    kind='line', facet_kws=dict(sharex=True, sharey=False),
+                    data=data)
+    return g
+
+g = plot_by_unc(df)
+#%%
+g = plot_by_unc(df[df['winsize'] <= 24])
+for ax, ylim in zip(np.squeeze(g.axes), [(0.32, 0.42), (0, 0.1), (0.6, 0.7)]):
+    ax.set_ylim(ylim)
 #%%
 #fig, axs = plt.subplots(2, 2, sharex=True)
 #for col, ax in zip(cols, np.reshape(axs, (4))):
