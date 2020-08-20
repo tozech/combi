@@ -96,9 +96,20 @@ sns.scatterplot(x='F_x', y='F_y', hue='mu', data=df_all[df_all.mu < -10], marker
 def compute(df_all):
     df_all['err_x'] = df_all['F_x'] - df_all['G_x']
     df_all['err_y'] = df_all['F_y'] - df_all['G_y']
+    df_all['abs_err_x'] = df_all['err_x'].abs()
+    df_all['abs_err_y'] = df_all['err_y'].abs()
+    df_all['sum_F'] = df_all['F_x'] + df_all['F_y']
+    df_all['sum_F_prime'] = df_all['F_prime_x'] + df_all['F_prime_y']
+    df_all['sum_G'] = df_all['G_x'] + df_all['G_y']
+    df_all['err_sum'] = df_all['sum_F'] - df_all['sum_G']
+    df_all['abs_err_sum'] = df_all['err_sum'].abs()
     df_all['rm_err'] = np.sqrt(df_all['err_x']**2 + df_all['err_y']**2)
     df_all['delta_prime_x'] = df_all['F_x'] - df_all['F_prime_x']
     df_all['delta_prime_y'] = df_all['F_y'] - df_all['F_prime_y']
+    df_all['delta_prime_sum'] = df_all['sum_F'] - df_all['sum_F_prime']
+    df_all['abs_delta_prime_x'] = df_all['delta_prime_x'].abs()
+    df_all['abs_delta_prime_y'] = df_all['delta_prime_y'].abs()
+    df_all['abs_delta_prime_sum'] = df_all['delta_prime_sum'].abs()
     df_all['rm_delta_prime'] = np.sqrt(df_all['delta_prime_x']**2 + df_all['delta_prime_y']**2)
     return df_all
 
@@ -121,6 +132,24 @@ def plot_energy_score(df_all, x='mu'):
 # %%
 means = plot_energy_score(df_all, x='mu')
 
+
+# %%
+def plot_crps(df_all, x='mu'):
+    means = df_all.groupby(x).mean()
+    means['crps_x'] = means['abs_err_x'] - 1/2 * means['abs_delta_prime_x']
+    means['crps_y'] = means['abs_err_y'] - 1/2 * means['abs_delta_prime_y']
+    means['crps_sum'] = means['abs_err_sum'] - 1/2 * means['abs_delta_prime_sum']
+    fig, ax = plt.subplots()
+    means[['crps_x', 'crps_y', 'crps_sum']].plot(ax=ax)
+    return means
+
+
+# %%
+plot_crps(df_all, x='mu')
+
+# %%
+assert False
+
 # %% [markdown]
 # ### Error in variance
 
@@ -141,6 +170,9 @@ df_all = compute(df_all)
 # %%
 means = plot_energy_score(df_all, x='sigma_err')
 
+# %%
+plot_crps(df_all, x='sigma_err')
+
 # %% [markdown]
 # ### Error in correlation
 
@@ -160,3 +192,6 @@ df_all = compute(df_all)
 
 # %%
 means = plot_energy_score(df_all, x='rho')
+
+# %%
+plot_crps(df_all, x='rho')
