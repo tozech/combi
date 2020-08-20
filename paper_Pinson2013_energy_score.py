@@ -27,9 +27,6 @@ import properscoring
 # %matplotlib inline
 
 # %%
-plt.plot(np.linspace(0, 1, 10))
-
-# %%
 np.random.seed(42)
 
 # %% [markdown]
@@ -38,7 +35,7 @@ np.random.seed(42)
 # %%
 mu_G = np.array([0, 0])
 sigma_G = 1
-rho_G = 0.8
+rho_G = 0.4
 cov_G = np.array([[1, rho_G], [rho_G, 1]])
 
 def G(m):
@@ -50,14 +47,14 @@ def G(m):
 #Alternative: st.multivariate_normal?
 
 # %%
-m = 10000
+m = 50000
 samples_G = G(m)
 
 # %%
 df_G = pd.DataFrame.from_records(samples_G, columns=['x', 'y'])
 
 # %%
-sns.jointplot(x="x", y="y", data=df_G, marker=".", alpha=0.3).plot_joint(sns.kdeplot, zorder=0, n_levels=6);
+#sns.jointplot(x="x", y="y", data=df_G, marker=".", alpha=0.3).plot_joint(sns.kdeplot, zorder=0, n_levels=6);
 
 # %% [markdown]
 # ### Error in mean
@@ -88,9 +85,9 @@ def F(m, mu, sigma, rho):
 # %%
 df_all = pd.concat([F(m, x, sigma_F, rho_F) for x in mu_Fs])
 
-# %%
-sns.scatterplot(x='F_x', y='F_y', hue='mu', data=df_all[df_all.mu < -10], marker=".", alpha=0.3)
 
+# %%
+#sns.scatterplot(x='F_x', y='F_y', hue='mu', data=df_all[df_all.mu < -10], marker=".", alpha=0.3)
 
 # %%
 def compute(df_all):
@@ -101,15 +98,22 @@ def compute(df_all):
     df_all['sum_F'] = df_all['F_x'] + df_all['F_y']
     df_all['sum_F_prime'] = df_all['F_prime_x'] + df_all['F_prime_y']
     df_all['sum_G'] = df_all['G_x'] + df_all['G_y']
+    df_all['diff_F'] = df_all['F_x'] - df_all['F_y']
+    df_all['diff_F_prime'] = df_all['F_prime_x'] - df_all['F_prime_y']
+    df_all['diff_G'] = df_all['G_x'] - df_all['G_y']
     df_all['err_sum'] = df_all['sum_F'] - df_all['sum_G']
     df_all['abs_err_sum'] = df_all['err_sum'].abs()
+    df_all['err_diff'] = df_all['diff_F'] - df_all['diff_G']
+    df_all['abs_err_diff'] = df_all['err_diff'].abs()
     df_all['rm_err'] = np.sqrt(df_all['err_x']**2 + df_all['err_y']**2)
     df_all['delta_prime_x'] = df_all['F_x'] - df_all['F_prime_x']
     df_all['delta_prime_y'] = df_all['F_y'] - df_all['F_prime_y']
     df_all['delta_prime_sum'] = df_all['sum_F'] - df_all['sum_F_prime']
+    df_all['delta_prime_diff'] = df_all['diff_F'] - df_all['diff_F_prime']
     df_all['abs_delta_prime_x'] = df_all['delta_prime_x'].abs()
     df_all['abs_delta_prime_y'] = df_all['delta_prime_y'].abs()
     df_all['abs_delta_prime_sum'] = df_all['delta_prime_sum'].abs()
+    df_all['abs_delta_prime_diff'] = df_all['delta_prime_diff'].abs()
     df_all['rm_delta_prime'] = np.sqrt(df_all['delta_prime_x']**2 + df_all['delta_prime_y']**2)
     return df_all
 
@@ -119,6 +123,9 @@ df_all = compute(df_all)
 
 # %%
 df_all.head()
+
+# %%
+df_all.loc[df_all['mu'] == mu_Fs[0], 'diff_F'].hist(bins=30)
 
 
 # %%
@@ -139,8 +146,9 @@ def plot_crps(df_all, x='mu'):
     means['crps_x'] = means['abs_err_x'] - 1/2 * means['abs_delta_prime_x']
     means['crps_y'] = means['abs_err_y'] - 1/2 * means['abs_delta_prime_y']
     means['crps_sum'] = means['abs_err_sum'] - 1/2 * means['abs_delta_prime_sum']
+    means['crps_diff'] = means['abs_err_diff'] - 1/2 * means['abs_delta_prime_diff']
     fig, ax = plt.subplots()
-    means[['crps_x', 'crps_y', 'crps_sum']].plot(ax=ax)
+    means[['crps_x', 'crps_y', 'crps_sum', 'crps_diff']].plot(ax=ax)
     return means
 
 
@@ -148,7 +156,7 @@ def plot_crps(df_all, x='mu'):
 plot_crps(df_all, x='mu')
 
 # %%
-assert False
+#assert False
 
 # %% [markdown]
 # ### Error in variance
