@@ -30,12 +30,18 @@ import properscoring
 np.random.seed(42)
 
 # %% [markdown]
+# ## Energy score
+
+# %% [markdown]
+# ![energy_score_gneiting2007.png](attachment:energy_score_gneiting2007.png)
+
+# %% [markdown]
 # # Actual distribution
 
 # %%
 mu_G = np.array([0, 0])
 sigma_G = 1
-rho_G = 0.4
+rho_G = 0.75
 cov_G = np.array([[1, rho_G], [rho_G, 1]])
 
 def G(m):
@@ -47,20 +53,25 @@ def G(m):
 #Alternative: st.multivariate_normal?
 
 # %%
-m = 50000
-samples_G = G(m)
+m = 2000
+n = 200
+samples_G = np.repeat(G(m), repeats=[n for i in range(m)], axis=0)
+
+# %%
+samples_G
 
 # %%
 df_G = pd.DataFrame.from_records(samples_G, columns=['x', 'y'])
 
 # %%
-#sns.jointplot(x="x", y="y", data=df_G, marker=".", alpha=0.3).plot_joint(sns.kdeplot, zorder=0, n_levels=6);
+sns.jointplot(x="x", y="y", data=df_G.iloc[slice(None, None, n)], 
+              marker=".", alpha=0.3).plot_joint(sns.kdeplot, zorder=0, n_levels=6);
 
 # %% [markdown]
 # ### Error in mean
 
 # %%
-mu_Fs = np.linspace(-15, 5, 10)
+mu_Fs = np.linspace(-5, 5, 20)
 sigma_F = sigma_G
 rho_F = 0.5
 
@@ -68,9 +79,9 @@ def F(m, mu, sigma, rho):
     mu_F = np.tile(mu, 2)
     sigma_F = sigma
     cov_F = np.array([[1, rho], [rho, 1]])
-    df = pd.DataFrame.from_records(np.random.multivariate_normal(mu_F, sigma_F**2 * cov_F, m), 
+    df = pd.DataFrame.from_records(np.random.multivariate_normal(mu_F, sigma_F**2 * cov_F, m*n), 
                                    columns=['F_x', 'F_y'])
-    df = df.join(pd.DataFrame.from_records(np.random.multivariate_normal(mu_F, sigma_F**2 * cov_F, m), 
+    df = df.join(pd.DataFrame.from_records(np.random.multivariate_normal(mu_F, sigma_F**2 * cov_F, m*n), 
                                            columns=['F_prime_x', 'F_prime_y']))
     df['mu'] = mu
     df['sigma'] = sigma
@@ -85,9 +96,9 @@ def F(m, mu, sigma, rho):
 # %%
 df_all = pd.concat([F(m, x, sigma_F, rho_F) for x in mu_Fs])
 
-
 # %%
-#sns.scatterplot(x='F_x', y='F_y', hue='mu', data=df_all[df_all.mu < -10], marker=".", alpha=0.3)
+sns.scatterplot(x='F_x', y='F_y', hue='mu', data=df_all[df_all.mu < -3], marker=".", alpha=0.3)
+
 
 # %%
 def compute(df_all):
@@ -163,7 +174,7 @@ plot_crps(df_all, x='mu')
 
 # %%
 mu_F = 0.
-sigma_Fs = np.concatenate([np.linspace(0.1, 0.9, 9), np.linspace(1, 10, 10)])
+sigma_Fs = np.concatenate([np.linspace(0.1, 0.9, 9), np.linspace(1, 3, 10)])
 rho_F = 0.5
 
 # %%
